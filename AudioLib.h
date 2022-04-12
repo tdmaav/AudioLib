@@ -1,6 +1,6 @@
-/*
+/************************************************************************
  * Audio library
- */
+ ************************************************************************/
 
 #pragma once
 
@@ -15,7 +15,7 @@
 #include <AVFoundation/AVAsset.h>
 
 /*
-*/
+ */
 
 namespace AudioLib {
 
@@ -174,11 +174,11 @@ protected:
     bool is_playing = false;
 };
 
-/*
+/************************************************************************
  * WAV
- */
+ ************************************************************************/
 
-class AudioFileWAV : public Sound {
+class SoundWAV : public Sound {
 public:
     int32_t load(const std::string &_filename, bool _is_loop) override {
         this->filename = _filename;
@@ -232,11 +232,11 @@ public:
     }
 };
 
-/*
+/************************************************************************
  * OGG
- */
+ ************************************************************************/
 
-class AudioFileOGG : public Sound {
+class SoundOGG : public Sound {
 public:
     int32_t load(const std::string &_filename, bool _is_loop) override {
         this->filename = _filename;
@@ -264,9 +264,9 @@ public:
     }
 };
 
-/*
+/************************************************************************
  * Backends
- */
+ ************************************************************************/
 
 struct Backend {
     Backend(Manager *mgr) { }
@@ -309,10 +309,9 @@ struct BackendAudioToolbox : Backend {
     AudioQueueRef audioQueue;
 };
 
-
-/*
+/************************************************************************
  * Manager
- */
+ ************************************************************************/
 
 inline void low(uint8_t &c) { if((c>191 && c<224) || (c>64 && c<91)) c += 32; }
 static std::string strlow(const std::string &_str) {
@@ -340,8 +339,8 @@ public:
         ext = strlow(ext);
         
         Sound *ret = nullptr;
-        if(ext == "wav") ret = new AudioFileWAV();
-        else if(ext == "ogg") ret = new AudioFileOGG();
+        if(ext == "wav") ret = new SoundWAV();
+        else if(ext == "ogg") ret = new SoundOGG();
         else return nullptr;
         
         ret->load(path,_is_loop);
@@ -367,10 +366,9 @@ private:
     void *prev_buffer = nullptr;
 };
 
-
-/*
+/************************************************************************
  * Backend callbacks
- */
+ ************************************************************************/
 
 static void fill_buffer(void* inUserData, AudioQueueRef queue, AudioQueueBufferRef buffer) {
     auto manager = static_cast<Manager*>(inUserData);
