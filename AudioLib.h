@@ -19,6 +19,7 @@
 
 namespace AudioLib {
 
+class Manager;
 constexpr size_t FRAME_SIZE = sizeof(int16_t) * 2;
 constexpr size_t BUFFER_SIZE = 2048 * FRAME_SIZE;
 
@@ -35,7 +36,7 @@ public:
     friend class Manager;
     
     Sound() { }
-    virtual ~Sound() { }
+    virtual ~Sound() { delete [] data; }
 
     virtual int32_t load(const std::string &filename, bool _is_loop) = 0;
     
@@ -51,11 +52,11 @@ public:
     float volume = 1.0f;
     
 protected:
-    void readBufferS16(void *buf, void *prev_buf, void *temp_buf, size_t samples) {
+    void fillBuffer(void *buf, void *prev_buf, void *temp_buf, size_t samples) {
         if(!isPlaying() || !data) return;
         
         int16_t *dst = static_cast<int16_t*>(temp_buf);
-        const int16_t *src = static_cast<const int16_t*>(data);
+        const int16_t *src = reinterpret_cast<const int16_t*>(data);
         size_t src_samples = this->size / sizeof(int16_t);
         int32_t sample_scale = 44100 / freq;
         
@@ -161,7 +162,7 @@ protected:
         }
     }
 
-    void *data = nullptr;
+    uint8_t *data = nullptr;
     size_t size;
     int channels, freq, bps;
     bool is_loop = false;
@@ -175,24 +176,6 @@ protected:
  * WAV
  */
 
-enum {
-    WAV_CHUNK_RIFF = 0x46464952,
-    WAV_CHUNK_WAVE = 0x45564157,
-    WAV_CHUNK_FMT = 0x20746D66,
-    WAV_CHUNK_DATA = 0x61746164,
-};
-
-#pragma pack(push,1)
-struct WavChunkFmt{
-    uint16_t format;
-    uint16_t channels;
-    uint32_t sample_rate;
-    uint32_t byte_rate;
-    uint16_t block_align;
-    uint16_t bps;
-};
-#pragma pack(pop)
-
 class AudioFileWAV : public Sound {
 public:
     int32_t load(const std::string &_filename, bool _is_loop) override {
@@ -201,57 +184,41 @@ public:
 
         FILE *file = fopen(filename.c_str(), "rb");
         if(!file) return AUDIOLIB_FILE_ERROR;
+        fseek(file,12,SEEK_SET);
 
-        uint32_t chunk_id;
-        uint32_t chunk_size;
-        uint32_t chunk_wave;
-
-        fread(&chunk_id,4,1,file);
-        fread(&chunk_size,4,1,file);
-        fread(&chunk_wave,4,1,file);
-
-        if(chunk_id != WAV_CHUNK_RIFF || chunk_wave != WAV_CHUNK_WAVE) {
-            fclose(file);
-            return AUDIOLIB_DECODE_ERROR;
-        }
-
-        // read fmt
-        while(true) {
-            if(!fread(&chunk_id,4,1,file)) break;
-            if(!fread(&chunk_size,4,1,file)) break;
-            if(chunk_id == WAV_CHUNK_FMT) break;
-            fseek(file,chunk_size,SEEK_CUR);
-        }
-        if(feof(file)) {
-            fclose(file);
-            return AUDIOLIB_DECODE_ERROR;
-        }
-
-        WavChunkFmt fmt;
-        fread(&fmt,sizeof(WavChunkFmt),1,file);
-
-        if(fmt.format != 1 || fmt.bps != 16) {
-            fclose(file);
-            return AUDIOLIB_DECODE_ERROR;
-        }
-
-        // read data
-        while(true) {
-            if(!fread(&chunk_id,4,1,file)) break;
-            if(!fread(&chunk_size,4,1,file)) break;
-            if(chunk_id == WAV_CHUNK_DATA) break;
-            fseek(file,chunk_size,SEEK_CUR);
-        }
-
-        this->channels = fmt.channels;
-        this->bps = fmt.bps;
-        this->freq = fmt.sample_rate;
-        this->size = chunk_size;
-        this->data = new uint8_t[chunk_size];
-        fread(data,chunk_size,1,file);
-        fclose(file);
+        struct WaveFormat{
+            uint16_t format;
+            uint16_t channels;
+            uint32_t sample_rate;
+            uint32_t byte_rate;
+            uint16_t block_align;
+            uint16_t bps;
+        } fmt;
         
-        return AUDIOLIB_SUCCESS;
+        while(!feof(file)) {
+            uint32_t chunk_id;
+            uint32_t chunk_size;
+            if(!fread(&chunk_id,4,1,file)) break;
+            if(!fread(&chunk_size,4,1,file)) break;
+            if(chunk_id == 0x20746D66) { // format
+                fread(&fmt,sizeof(WaveFormat),1,file);
+                this->channels = fmt.channels;
+                this->bps = fmt.bps;
+                this->freq = fmt.sample_rate;
+                if(fmt.format != 1 || fmt.bps != 16) break;
+            } else if(chunk_id == 0x61746164) { // data
+                this->size = chunk_size;
+                this->data = new uint8_t[chunk_size];
+                fread(data,chunk_size,1,file);
+                fclose(file);
+                return AUDIOLIB_SUCCESS;
+            } else {
+                fseek(file,chunk_size,SEEK_CUR);
+            }
+        }
+        
+        fclose(file);
+        return AUDIOLIB_DECODE_ERROR;
     }
 };
 
@@ -289,42 +256,36 @@ public:
             return AUDIOLIB_WRONG_SAMPLE_RATE;
         }
 
-        stb_vorbis_get_samples_short_interleaved(stream, info.channels, static_cast<short*>(data), samples);
+        stb_vorbis_get_samples_short_interleaved(stream, info.channels, reinterpret_cast<short*>(data), samples);
         stb_vorbis_close(stream);
-        
         return AUDIOLIB_SUCCESS;
     }
 };
 
 /*
- * Manager
+ * Backends
  */
 
-static void fill_buffer(void*, AudioQueueRef, AudioQueueBufferRef);
+struct Backend {
+    Backend(Manager *mgr) { }
+    virtual ~Backend() { };
+};
 
-inline void low(uint8_t &c) { if((c>191 && c<224) || (c>64 && c<91)) c += 32; }
+static void fill_buffer(void* inUserData, AudioQueueRef queue, AudioQueueBufferRef buffer);
+struct BackendAudioToolbox : Backend {
+    BackendAudioToolbox(Manager *mgr) : Backend(mgr) {
+        AudioStreamBasicDescription desc;
+        desc.mSampleRate = 44100;
+        desc.mFormatID = kAudioFormatLinearPCM;
+        desc.mFormatFlags = kLinearPCMFormatFlagIsSignedInteger;
+        desc.mBytesPerPacket = 4;
+        desc.mFramesPerPacket = 1;
+        desc.mBytesPerFrame = 4;
+        desc.mChannelsPerFrame = 2;
+        desc.mBitsPerChannel = 16;
+        desc.mReserved = 0;
 
-static std::string strlow(const std::string &_str) {
-    std::string temp(_str);
-    for(auto &c : temp) low(reinterpret_cast<uint8_t&>(c));
-    return temp;
-}
-
-class Manager {
-public:
-    Manager() {
-        AudioStreamBasicDescription deviceFormat;
-        deviceFormat.mSampleRate = 44100;
-        deviceFormat.mFormatID = kAudioFormatLinearPCM;
-        deviceFormat.mFormatFlags = kLinearPCMFormatFlagIsSignedInteger;
-        deviceFormat.mBytesPerPacket = 4;
-        deviceFormat.mFramesPerPacket = 1;
-        deviceFormat.mBytesPerFrame = 4;
-        deviceFormat.mChannelsPerFrame = 2;
-        deviceFormat.mBitsPerChannel = 16;
-        deviceFormat.mReserved = 0;
-
-        OSStatus r = AudioQueueNewOutput(&deviceFormat, fill_buffer, this, NULL, kCFRunLoopCommonModes, 0, &audioQueue);
+        auto r = AudioQueueNewOutput(&desc, fill_buffer, mgr, NULL, kCFRunLoopCommonModes, 0, &audioQueue);
         if(r) printf("AudioQueueNewOutput() failed");
         
         for(int i = 0; i < 2; i++) {
@@ -337,14 +298,37 @@ public:
         }
         r = AudioQueueStart(audioQueue, NULL);
         if(r) printf("AudioQueueStart() failed");
-        
+    }
+    ~BackendAudioToolbox() {
+        AudioQueueStop(audioQueue, true);
+        AudioQueueDispose(audioQueue, true);
+    }
+    
+    AudioQueueRef audioQueue;
+};
+
+
+/*
+ * Manager
+ */
+
+inline void low(uint8_t &c) { if((c>191 && c<224) || (c>64 && c<91)) c += 32; }
+static std::string strlow(const std::string &_str) {
+    std::string temp(_str);
+    for(auto &c : temp) low(reinterpret_cast<uint8_t&>(c));
+    return temp;
+}
+
+class Manager {
+public:
+    Manager() {
         temp_buf = new int16_t[BUFFER_SIZE / 2];
+        backend = new BackendAudioToolbox(this);
     }
     
     ~Manager() {
+        delete backend;
         delete [] temp_buf;
-        AudioQueueStop(audioQueue, true);
-        AudioQueueDispose(audioQueue, true);
     }
     
     Sound *load(const std::string &path, bool _is_loop) {
@@ -369,23 +353,28 @@ public:
         delete p;
     }
     
-    void readBufferS16(void *buf, size_t samples) {
-        for(auto *s : sounds) s->readBufferS16(buf,prev_buffer,temp_buf,samples);
+    void fillBuffer(void *buf, size_t samples) {
+        for(auto *s : sounds) s->fillBuffer(buf,prev_buffer,temp_buf,samples);
         prev_buffer = buf;
     }
     
 private:
+    Backend *backend = nullptr;
     int16_t *temp_buf = nullptr;
-    AudioQueueRef audioQueue;
     std::vector<Sound*> sounds;
     void *prev_buffer = nullptr;
 };
+
+
+/*
+ * Backend callbacks
+ */
 
 static void fill_buffer(void* inUserData, AudioQueueRef queue, AudioQueueBufferRef buffer) {
     auto manager = static_cast<Manager*>(inUserData);
     buffer->mAudioDataByteSize = BUFFER_SIZE;
     memset(buffer->mAudioData, 0, buffer->mAudioDataByteSize);
-    manager->readBufferS16(buffer->mAudioData, buffer->mAudioDataBytesCapacity / FRAME_SIZE);
+    manager->fillBuffer(buffer->mAudioData, buffer->mAudioDataBytesCapacity / FRAME_SIZE);
     AudioQueueEnqueueBuffer(queue, buffer, 0, NULL);
 }
 
