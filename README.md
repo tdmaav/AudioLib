@@ -7,7 +7,7 @@
 
 manager = new AudioManager();
 
-audio = manager->load("ocean.ogg", true);
-audio->volume = 0.5f;
-audio->play();
+sound = manager->load("ocean.ogg", true);
+sound->volume = 0.5f;
+sound->play();
 ```
