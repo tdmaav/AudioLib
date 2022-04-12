@@ -5,7 +5,7 @@
 ```c++
 #include "AudioLib.h"
 
-manager = new AudioManager();
+manager = new AudioLib::Manager();
 
 sound = manager->load("ocean.ogg", true);
 sound->volume = 0.5f;
