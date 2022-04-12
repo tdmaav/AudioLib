@@ -50,6 +50,7 @@ public:
     std::string getFilePath() const { return filename; }
     
     float volume = 1.0f;
+    float pan = 0.0f;
     
 protected:
     void fillBuffer(void *buf, void *prev_buf, void *temp_buf, size_t samples) {
@@ -154,9 +155,10 @@ protected:
         }
         
         // mix
+        float volumes[2] = { std::min(-pan + 1.0f, 1.0f) * volume, std::min(pan + 1.0f, 1.0f) * volume };
         int16_t *outbuf = static_cast<int16_t*>(buf);
         for(size_t i = 0; i < num; i++) {
-            int32_t v = outbuf[i] + dst[i] * volume;
+            int32_t v = outbuf[i] + dst[i] * volumes[i % 2];
             outbuf[i] = std::min(std::max(v, int32_t(std::numeric_limits<int16>::min())),
                                  int32_t(std::numeric_limits<int16>::max()));
         }
@@ -206,6 +208,14 @@ public:
                 this->bps = fmt.bps;
                 this->freq = fmt.sample_rate;
                 if(fmt.format != 1 || fmt.bps != 16) break;
+                if(fmt.channels < 0 || fmt.channels > 2) {
+                    fclose(file);
+                    return AUDIOLIB_WRONG_CHANNEL_COUNT;
+                }
+                if(freq != 44100 && freq != 22050 && freq != 11025) {
+                    fclose(file);
+                    return AUDIOLIB_WRONG_SAMPLE_RATE;
+                }
             } else if(chunk_id == 0x61746164) { // data
                 this->size = chunk_size;
                 this->data = new uint8_t[chunk_size];
@@ -233,29 +243,21 @@ public:
         this->is_loop = _is_loop;
         
         stb_vorbis *stream = stb_vorbis_open_filename(filename.c_str(), NULL, NULL);
-        if(!stream) {
-            return AUDIOLIB_FILE_ERROR;
-        }
+        if(!stream) return AUDIOLIB_FILE_ERROR;
 
         auto info = stb_vorbis_get_info(stream);
         uint32_t samples = stb_vorbis_stream_length_in_samples(stream) * info.channels;
-        if(!samples) {
-            return AUDIOLIB_DECODE_ERROR;
-        }
-        if(info.channels < 0 || info.channels > 2) {
+        if(!samples) return AUDIOLIB_DECODE_ERROR;
+        if(info.channels < 0 || info.channels > 2)
             return AUDIOLIB_WRONG_CHANNEL_COUNT;
-        }
+        if(info.sample_rate != 44100 && info.sample_rate != 22050 && info.sample_rate != 11025)
+            return AUDIOLIB_WRONG_SAMPLE_RATE;
         
         this->channels = info.channels;
         this->bps = 16;
         this->freq = info.sample_rate;
         this->size = samples * sizeof(int16_t);
         this->data = new uint8_t[this->size];
-        
-        if(freq != 44100 && freq != 22050 && freq != 11025) {
-            return AUDIOLIB_WRONG_SAMPLE_RATE;
-        }
-
         stb_vorbis_get_samples_short_interleaved(stream, info.channels, reinterpret_cast<short*>(data), samples);
         stb_vorbis_close(stream);
         return AUDIOLIB_SUCCESS;
