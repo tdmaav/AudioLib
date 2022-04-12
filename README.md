@@ -1,4 +1,9 @@
 # AudioLib
+Simple lightweight header-only audio library for iOS
+
+## Features
+* support for OGG & WAV
+* seamless loop playback
 
 ## Usage:
 
