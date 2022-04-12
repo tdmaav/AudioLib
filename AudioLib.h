@@ -98,59 +98,47 @@ protected:
         // 22050 to 44100
         if(sample_scale == 2) {
             for(int32 j = num - 1; j > sample_scale * 2; j -= sample_scale * 2) {
-                int16_t w0 = dst[i-3];
-                int16_t w1 = dst[i-2];
-                int16_t w2 = dst[i-1];
-                int16_t w3 = dst[i];
-                dst[j-3] = (w2 + w0) / 2;
-                dst[j-2] = (w3 + w1) / 2;
-                dst[j-1] = w2;
-                dst[j  ] = w3;
+                int16_t w[] = { dst[i-3], dst[i-2], dst[i-1], dst[i] };
+                dst[j-3] = (w[2] + w[0]) / 2;
+                dst[j-2] = (w[3] + w[1]) / 2;
+                dst[j-1] = w[2];
+                dst[j  ] = w[3];
                 i -= 2;
             }
             if(prev_buf) {
                 int16_t *prev_dst = static_cast<int16_t*>(prev_buf);
-                int16_t w0 = prev_dst[num-2];
-                int16_t w1 = prev_dst[num-1];
-                int16_t w2 = dst[0];
-                int16_t w3 = dst[1];
-                dst[0] = (w2 + w0) / 2;
-                dst[1] = (w3 + w1) / 2;
-                dst[2] = w2;
-                dst[3] = w3;
+                int16_t w[] = { prev_dst[num-2], prev_dst[num-1], dst[0], dst[1] };
+                dst[0] = (w[2] + w[0]) / 2;
+                dst[1] = (w[3] + w[1]) / 2;
+                dst[2] = w[2];
+                dst[3] = w[3];
             }
             
         // 11025 to 44100
         } else if(sample_scale == 4) {
             for(int32 j = num - 1; j > sample_scale * 2; j -= sample_scale * 2) {
-                int16_t w0 = dst[i-3];
-                int16_t w1 = dst[i-2];
-                int16_t w2 = dst[i-1];
-                int16_t w3 = dst[i];
-                dst[j-7] = (w2 + w0*3) / 4;
-                dst[j-6] = (w3 + w1*3) / 4;
-                dst[j-5] = (w2 + w0) / 2;
-                dst[j-4] = (w3 + w1) / 2;
-                dst[j-3] = (w2*3 + w0) / 4;
-                dst[j-2] = (w3*3 + w1) / 4;
-                dst[j-1] = w2;
-                dst[j  ] = w3;
+                int16_t w[] = { dst[i-3], dst[i-2], dst[i-1], dst[i] };
+                dst[j-7] = (w[2] + w[0]*3) / 4;
+                dst[j-6] = (w[3] + w[1]*3) / 4;
+                dst[j-5] = (w[2] + w[0]) / 2;
+                dst[j-4] = (w[3] + w[1]) / 2;
+                dst[j-3] = (w[2]*3 + w[0]) / 4;
+                dst[j-2] = (w[3]*3 + w[1]) / 4;
+                dst[j-1] = w[2];
+                dst[j  ] = w[3];
                 i -= 2;
             }
             if(prev_buf) {
                 int16_t *prev_dst = static_cast<int16_t*>(prev_buf);
-                int16_t w0 = prev_dst[num-2];
-                int16_t w1 = prev_dst[num-1];
-                int16_t w2 = dst[0];
-                int16_t w3 = dst[1];
-                dst[0] = (w2 + w0*3) / 4;
-                dst[1] = (w3 + w1*3) / 4;
-                dst[2] = (w2 + w0) / 2;
-                dst[3] = (w3 + w1) / 2;
-                dst[4] = (w2*3 + w0) / 4;
-                dst[5] = (w3*3 + w1) / 4;
-                dst[6] = w2;
-                dst[7] = w3;
+                int16_t w[] = { prev_dst[num-2], prev_dst[num-1], dst[0], dst[1] };
+                dst[0] = (w[2] + w[0]*3) / 4;
+                dst[1] = (w[3] + w[1]*3) / 4;
+                dst[2] = (w[2] + w[0]) / 2;
+                dst[3] = (w[3] + w[1]) / 2;
+                dst[4] = (w[2]*3 + w[0]) / 4;
+                dst[5] = (w[3]*3 + w[1]) / 4;
+                dst[6] = w[2];
+                dst[7] = w[3];
             }
         }
         
