@@ -98,7 +98,7 @@ protected:
         // 22050 to 44100
         if(sample_scale == 2) {
             for(int32 j = num - 1; j > sample_scale * 2; j -= sample_scale * 2) {
-                int16_t w[] = { dst[i-3], dst[i-2], dst[i-1], dst[i] };
+                const int16_t w[] = { dst[i-3], dst[i-2], dst[i-1], dst[i] };
                 dst[j-3] = (w[2] + w[0]) / 2;
                 dst[j-2] = (w[3] + w[1]) / 2;
                 dst[j-1] = w[2];
@@ -106,8 +106,8 @@ protected:
                 i -= 2;
             }
             if(prev_buf) {
-                int16_t *prev_dst = static_cast<int16_t*>(prev_buf);
-                int16_t w[] = { prev_dst[num-2], prev_dst[num-1], dst[0], dst[1] };
+                const int16_t *prev_dst = static_cast<const int16_t*>(prev_buf);
+                const int16_t w[] = { prev_dst[num-2], prev_dst[num-1], dst[0], dst[1] };
                 dst[0] = (w[2] + w[0]) / 2;
                 dst[1] = (w[3] + w[1]) / 2;
                 dst[2] = w[2];
@@ -117,7 +117,7 @@ protected:
         // 11025 to 44100
         } else if(sample_scale == 4) {
             for(int32 j = num - 1; j > sample_scale * 2; j -= sample_scale * 2) {
-                int16_t w[] = { dst[i-3], dst[i-2], dst[i-1], dst[i] };
+                const int16_t w[] = { dst[i-3], dst[i-2], dst[i-1], dst[i] };
                 dst[j-7] = (w[2] + w[0]*3) / 4;
                 dst[j-6] = (w[3] + w[1]*3) / 4;
                 dst[j-5] = (w[2] + w[0]) / 2;
@@ -129,8 +129,8 @@ protected:
                 i -= 2;
             }
             if(prev_buf) {
-                int16_t *prev_dst = static_cast<int16_t*>(prev_buf);
-                int16_t w[] = { prev_dst[num-2], prev_dst[num-1], dst[0], dst[1] };
+                const int16_t *prev_dst = static_cast<const int16_t*>(prev_buf);
+                const int16_t w[] = { prev_dst[num-2], prev_dst[num-1], dst[0], dst[1] };
                 dst[0] = (w[2] + w[0]*3) / 4;
                 dst[1] = (w[3] + w[1]*3) / 4;
                 dst[2] = (w[2] + w[0]) / 2;
@@ -147,8 +147,7 @@ protected:
         int16_t *outbuf = static_cast<int16_t*>(buf);
         for(size_t i = 0; i < num; i++) {
             int32_t v = outbuf[i] + dst[i] * volumes[i % 2];
-            outbuf[i] = std::min(std::max(v, int32_t(std::numeric_limits<int16>::min())),
-                                 int32_t(std::numeric_limits<int16>::max()));
+            outbuf[i] = std::min(std::max(v, -32768), 32767);
         }
     }
 
@@ -206,6 +205,7 @@ public:
                 }
             } else if(chunk_id == 0x61746164) { // data
                 this->size = chunk_size;
+                this->duration_sec = float(size / sizeof(int16_t) / channels) / freq;
                 this->data = new uint8_t[chunk_size];
                 fread(data,chunk_size,1,file);
                 fclose(file);
@@ -245,6 +245,7 @@ public:
         this->bps = 16;
         this->freq = info.sample_rate;
         this->size = samples * sizeof(int16_t);
+        this->duration_sec = float(samples / channels) / freq;
         this->data = new uint8_t[this->size];
         stb_vorbis_get_samples_short_interleaved(stream, info.channels, reinterpret_cast<short*>(data), samples);
         stb_vorbis_close(stream);
