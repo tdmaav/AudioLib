@@ -6,7 +6,12 @@
 
 #include <string>
 #include <vector>
+
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcomma"
 #include "stb_vorbis.h"
+#pragma GCC diagnostic pop
 
 #include <AudioToolbox/AudioQueue.h>
 #include <AVFoundation/AVFoundation.h>
@@ -258,13 +263,13 @@ public:
  ************************************************************************/
 
 struct Backend {
-    Backend(Manager *mgr) { }
+    Backend() { }
     virtual ~Backend() { };
 };
 
 static void fill_buffer(void* inUserData, AudioQueueRef queue, AudioQueueBufferRef buffer);
 struct BackendAudioToolbox : Backend {
-    BackendAudioToolbox(Manager *mgr) : Backend(mgr) {
+    BackendAudioToolbox(Manager *mgr) : Backend() {
         AudioStreamBasicDescription desc;
         desc.mSampleRate = 44100;
         desc.mFormatID = kAudioFormatLinearPCM;
@@ -276,26 +281,27 @@ struct BackendAudioToolbox : Backend {
         desc.mBitsPerChannel = 16;
         desc.mReserved = 0;
 
-        auto r = AudioQueueNewOutput(&desc, fill_buffer, mgr, NULL, kCFRunLoopCommonModes, 0, &audioQueue);
+        auto r = AudioQueueNewOutput(&desc, fill_buffer, mgr, NULL, kCFRunLoopCommonModes, 0, &queue);
         if(r) printf("AudioQueueNewOutput() failed");
         
         for(int i = 0; i < 2; i++) {
             AudioQueueBufferRef buffer;
-            r = AudioQueueAllocateBuffer(audioQueue, BUFFER_SIZE, &buffer);
+            r = AudioQueueAllocateBuffer(queue, BUFFER_SIZE, &buffer);
             if(r) printf("AudioQueueAllocateBuffer() failed");
             buffer->mAudioDataByteSize = BUFFER_SIZE;
             memset(buffer->mAudioData, 0, buffer->mAudioDataByteSize);
-            AudioQueueEnqueueBuffer(audioQueue, buffer, 0, NULL);
+            AudioQueueEnqueueBuffer(queue, buffer, 0, NULL);
         }
-        r = AudioQueueStart(audioQueue, NULL);
+        r = AudioQueueStart(queue, NULL);
         if(r) printf("AudioQueueStart() failed");
     }
+    
     ~BackendAudioToolbox() {
-        AudioQueueStop(audioQueue, true);
-        AudioQueueDispose(audioQueue, true);
+        AudioQueueStop(queue, true);
+        AudioQueueDispose(queue, true);
     }
     
-    AudioQueueRef audioQueue;
+    AudioQueueRef queue;
 };
 
 /************************************************************************
