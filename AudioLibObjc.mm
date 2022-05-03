@@ -71,20 +71,16 @@
     
     switch(err) {
         case AudioLib::AUDIOLIB_FILE_ERROR:
-            [NSException raise:NSGenericException
-                        format:@"File error: %@", path];
+            [NSException raise:NSGenericException format:@"File error: %@", path];
             break;
         case AudioLib::AUDIOLIB_DECODE_ERROR:
-            [NSException raise:NSInternalInconsistencyException
-                        format:@"Decode error: %@", path];
+            [NSException raise:NSInternalInconsistencyException format:@"Decode error: %@", path];
             break;
         case AudioLib::AUDIOLIB_WRONG_SAMPLE_RATE:
-            [NSException raise:NSInternalInconsistencyException
-                        format:@"Wrong sample rate in %@", path];
+            [NSException raise:NSInternalInconsistencyException format:@"Wrong sample rate in %@", path];
             break;
         case AudioLib::AUDIOLIB_WRONG_CHANNEL_COUNT:
-            [NSException raise:NSInternalInconsistencyException
-                        format:@"Wrong channel count in %@", path];
+            [NSException raise:NSInternalInconsistencyException format:@"Wrong channel count in %@", path];
             break;
         default:
             return [[AudioLibSound alloc] initWith:audio];
