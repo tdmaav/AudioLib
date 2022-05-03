@@ -47,6 +47,12 @@ public:
     
     void play() { is_playing = true; }
     void pause() { is_playing = false; }
+    void stop() {
+        is_playing = false;
+        pos_sample = 0;
+        delete [] data;
+        data = nullptr;
+    }
     void seek(float t_sec) { pos_sample = t_sec * bps * channels; }
 
     float getPositionSec() const { return (pos_sample / channels) / float(bps); }
@@ -59,7 +65,7 @@ public:
     
 protected:
     void fillBuffer(void *buf, void *prev_buf, void *temp_buf, size_t samples) {
-        if(!isPlaying() || !data) return;
+        if(!is_playing || !data) return;
         
         int16_t *dst = static_cast<int16_t*>(temp_buf);
         const int16_t *src = reinterpret_cast<const int16_t*>(data);
@@ -327,7 +333,7 @@ public:
         delete [] temp_buf;
     }
     
-    Sound *load(const std::string &path, bool _is_loop) {
+    Sound *load(const std::string &path, bool _is_loop, int32_t *err) {
         std::string ext;
         size_t dot = path.rfind('.');
         if(dot != std::string::npos) ext = path.substr(dot+1, path.length() - dot - 1);
@@ -338,7 +344,7 @@ public:
         else if(ext == "ogg") ret = new SoundOGG();
         else return nullptr;
         
-        ret->load(path,_is_loop);
+        *err = ret->load(path,_is_loop);
         sounds.push_back(ret);
         return ret;
     }

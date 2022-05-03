@@ -19,11 +19,6 @@
     return self;
 }
 
--(void) dealloc {
-    delete _sound;
-    [super dealloc];
-}
-
 -(void)setVolume:(float)v {
     _volume = v;
     _sound->volume = v;
@@ -37,11 +32,14 @@
 
 -(void) play { _sound->play(); }
 -(void) pause { _sound->pause(); }
+-(void) stop { _sound->stop(); }
 -(void) seek:(float)t_sec { _sound->seek(t_sec); }
 
 -(float) getPositionSec { return _sound->getPositionSec(); }
 -(float) getDuration { return _sound->getDuration(); }
 -(BOOL) isPlaying { return _sound->isPlaying(); }
+
+-(AudioLib::Sound*) getNativeHandle { return _sound; }
 
 @end
 
@@ -68,12 +66,34 @@
 
 -(AudioLibSound*) load:(NSString*)path isLoop:(BOOL)is_loop {
     std::string cpath([path UTF8String]);
-    auto audio = _manager->load(cpath,is_loop);
-    return [[AudioLibSound alloc] initWith:audio];
+    int32_t err = AudioLib::AUDIOLIB_SUCCESS;
+    auto audio = _manager->load(cpath,is_loop,&err);
+    
+    switch(err) {
+        case AudioLib::AUDIOLIB_FILE_ERROR:
+            [NSException raise:NSGenericException
+                        format:@"File error: %@", path];
+            break;
+        case AudioLib::AUDIOLIB_DECODE_ERROR:
+            [NSException raise:NSInternalInconsistencyException
+                        format:@"Decode error: %@", path];
+            break;
+        case AudioLib::AUDIOLIB_WRONG_SAMPLE_RATE:
+            [NSException raise:NSInternalInconsistencyException
+                        format:@"Wrong sample rate in %@", path];
+            break;
+        case AudioLib::AUDIOLIB_WRONG_CHANNEL_COUNT:
+            [NSException raise:NSInternalInconsistencyException
+                        format:@"Wrong channel count in %@", path];
+            break;
+        default:
+            return [[AudioLibSound alloc] initWith:audio];
+    }
 }
 
--(void) free:(AudioLibSound*)p {
-    
+-(void) release:(AudioLibSound*)p {
+    _manager->free([p getNativeHandle]);
+    [p release];
 }
 
 @end

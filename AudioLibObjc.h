@@ -5,6 +5,7 @@
 @property (nonatomic) float pan;
 -(void) play;
 -(void) pause;
+-(void) stop;
 -(void) seek:(float)t_sec;
 
 -(float) getPositionSec;
@@ -14,5 +15,5 @@
 
 @interface AudioLibManager : NSObject
 -(AudioLibSound*) load:(NSString*)path isLoop:(BOOL)is_loop;
--(void) free:(AudioLibSound*)p;
+-(void) release:(AudioLibSound*)p;
 @end
