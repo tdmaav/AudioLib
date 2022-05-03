@@ -82,9 +82,9 @@
         case AudioLib::AUDIOLIB_WRONG_CHANNEL_COUNT:
             [NSException raise:NSInternalInconsistencyException format:@"Wrong channel count in %@", path];
             break;
-        default:
-            return [[AudioLibSound alloc] initWith:audio];
     }
+    
+    return [[AudioLibSound alloc] initWith:audio];
 }
 
 -(void) release:(AudioLibSound*)p {
