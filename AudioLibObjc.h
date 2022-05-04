@@ -17,3 +17,7 @@
 -(AudioLibSound*) load:(NSString*)path isLoop:(BOOL)is_loop;
 -(void) release:(AudioLibSound*)p;
 @end
+
+@interface ObjC : NSObject
++ (BOOL)catchException:(void(^)(void))tryBlock error:(__autoreleasing NSError **)error;
+@end
