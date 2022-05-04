@@ -43,7 +43,7 @@ public:
     Sound() { }
     virtual ~Sound() { delete [] data; }
 
-    virtual int32_t load(const std::string &filename, bool _is_loop) = 0;
+    virtual int32_t load(const std::string &filename, int32_t _loop) = 0;
     
     void play() { is_playing = true; }
     void pause() { is_playing = false; }
@@ -70,33 +70,34 @@ protected:
         int16_t *dst = static_cast<int16_t*>(temp_buf);
         const int16_t *src = reinterpret_cast<const int16_t*>(data);
         size_t src_samples = this->size / sizeof(int16_t);
+        size_t src_samples_repeats = src_samples * (loop+1);
         int32_t sample_scale = 44100 / freq;
         
         samples /= sample_scale;
 
-        if(!is_loop) memset(temp_buf, 0, BUFFER_SIZE / 2);
+        if(loop >= 0) memset(temp_buf, 0, BUFFER_SIZE);
         
         // stereo
         if(channels == 2) {
-            if(is_loop) {
+            if(loop < 0) {
                 for(int j = 0; j < samples * 2; j++) {
                     dst[j] = src[(pos_sample + j) % src_samples];
                 }
-            } else if(pos_sample < src_samples) {
-                for(int j = 0; j < std::min(samples * 2, src_samples - pos_sample); j++) {
+            } else if(pos_sample < src_samples_repeats) {
+                for(int j = 0; j < std::min(samples * 2, src_samples_repeats - pos_sample); j++) {
                     dst[j] = src[(pos_sample + j) % src_samples];
                 }
             }
             
         // mono
         } else {
-            if(is_loop) {
+            if(loop < 0) {
                 for(int j = 0; j < samples; j++) {
                     dst[j*2] = dst[j*2+1] = src[(pos_sample + j) % src_samples];
                 }
-            } else if(pos_sample < src_samples) {
-                for(int j = 0; j < std::min(samples, src_samples - pos_sample); j++) {
-                    dst[j*2] = dst[j*2+1] = src[pos_sample + j];
+            } else if(pos_sample < src_samples_repeats) {
+                for(int j = 0; j < std::min(samples, src_samples_repeats - pos_sample); j++) {
+                    dst[j*2] = dst[j*2+1] = src[(pos_sample + j) % src_samples];
                 }
             }
         }
@@ -165,7 +166,7 @@ protected:
     uint8_t *data = nullptr;
     size_t size;
     int channels, freq, bps;
-    bool is_loop = false;
+    int32_t loop = 0;
     std::string filename;
     size_t pos_sample = 0;
     float duration_sec = 0.0f;
@@ -178,9 +179,9 @@ protected:
 
 class SoundWAV : public Sound {
 public:
-    int32_t load(const std::string &_filename, bool _is_loop) override {
+    int32_t load(const std::string &_filename, int32_t _loop) override {
         this->filename = _filename;
-        this->is_loop = _is_loop;
+        this->loop = _loop;
 
         FILE *file = fopen(filename.c_str(), "rb");
         if(!file) return AUDIOLIB_FILE_ERROR;
@@ -237,9 +238,9 @@ public:
 
 class SoundOGG : public Sound {
 public:
-    int32_t load(const std::string &_filename, bool _is_loop) override {
+    int32_t load(const std::string &_filename, int32_t _loop) override {
         this->filename = _filename;
-        this->is_loop = _is_loop;
+        this->loop = _loop;
         
         stb_vorbis *stream = stb_vorbis_open_filename(filename.c_str(), NULL, NULL);
         if(!stream) return AUDIOLIB_FILE_ERROR;
@@ -324,7 +325,7 @@ static std::string strlow(const std::string &_str) {
 class Manager {
 public:
     Manager() {
-        temp_buf = new int16_t[BUFFER_SIZE / 2];
+        temp_buf = new int16_t[BUFFER_SIZE / 2]; // bytes to shorts
         backend = new BackendAudioToolbox(this);
     }
     
@@ -333,7 +334,7 @@ public:
         delete [] temp_buf;
     }
     
-    Sound *load(const std::string &path, bool _is_loop, int32_t *err) {
+    Sound *load(const std::string &path, int32_t _is_loop, int32_t *err) {
         std::string ext;
         size_t dot = path.rfind('.');
         if(dot != std::string::npos) ext = path.substr(dot+1, path.length() - dot - 1);

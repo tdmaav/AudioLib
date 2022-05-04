@@ -14,7 +14,7 @@
 @end
 
 @interface AudioLibManager : NSObject
--(AudioLibSound*) load:(NSString*)path isLoop:(BOOL)is_loop;
+-(AudioLibSound*) load:(NSString*)path loop:(int)loop;
 -(void) release:(AudioLibSound*)p;
 @end
 

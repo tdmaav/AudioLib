@@ -64,10 +64,10 @@
     [super dealloc];
 }
 
--(AudioLibSound*) load:(NSString*)path isLoop:(BOOL)is_loop {
+-(AudioLibSound*) load:(NSString*)path loop:(int)loop {
     std::string cpath([path UTF8String]);
     int32_t err = AudioLib::AUDIOLIB_SUCCESS;
-    auto audio = _manager->load(cpath,is_loop,&err);
+    auto audio = _manager->load(cpath,loop,&err);
     
     switch(err) {
         case AudioLib::AUDIOLIB_FILE_ERROR:
