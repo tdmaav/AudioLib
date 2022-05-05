@@ -206,7 +206,7 @@ public:
                 this->bps = fmt.bps;
                 this->freq = fmt.sample_rate;
                 if(fmt.format != 1 || fmt.bps != 16) break;
-                if(fmt.channels < 0 || fmt.channels > 2) {
+                if(fmt.channels < 1 || fmt.channels > 2) {
                     fclose(file);
                     return AUDIOLIB_WRONG_CHANNEL_COUNT;
                 }
@@ -247,7 +247,7 @@ public:
         auto info = stb_vorbis_get_info(stream);
         uint32_t samples = stb_vorbis_stream_length_in_samples(stream) * info.channels;
         if(!samples) return AUDIOLIB_DECODE_ERROR;
-        if(info.channels < 0 || info.channels > 2)
+        if(info.channels < 1 || info.channels > 2)
             return AUDIOLIB_WRONG_CHANNEL_COUNT;
         if(info.sample_rate != 44100 && info.sample_rate != 22050 && info.sample_rate != 11025)
             return AUDIOLIB_WRONG_SAMPLE_RATE;
