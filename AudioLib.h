@@ -69,7 +69,7 @@ protected:
         int16_t *dst = static_cast<int16_t*>(temp_buf);
         const int16_t *src = reinterpret_cast<const int16_t*>(data);
         size_t src_samples = this->size / sizeof(int16_t);
-        size_t src_samples_repeats = src_samples * (loop+1);
+        size_t src_samples_repeats = src_samples * (loop + 1);
         int32_t sample_scale = 44100 / freq;
         
         samples /= sample_scale;
@@ -319,7 +319,7 @@ static std::string strlow(const std::string &_str) {
 class Manager {
 public:
     Manager() {
-        temp_buf = new int16_t[BUFFER_SIZE / 2]; // bytes to shorts
+        temp_buf = new uint8_t[BUFFER_SIZE];
         backend = new BackendAudioToolbox(this);
     }
     
@@ -357,7 +357,7 @@ public:
     
 private:
     BackendAudioToolbox *backend = nullptr;
-    int16_t *temp_buf = nullptr;
+    uint8_t *temp_buf = nullptr;
     std::vector<Sound*> sounds;
     void *prev_buffer = nullptr;
 };
