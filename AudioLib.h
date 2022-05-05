@@ -7,7 +7,6 @@
 #include <string>
 #include <vector>
 
-
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcomma"
 #include "stb_vorbis.h"
@@ -53,8 +52,8 @@ public:
         delete [] data;
         data = nullptr;
     }
+    
     void seek(float t_sec) { pos_sample = t_sec * bps * channels; }
-
     float getPositionSec() const { return (pos_sample / channels) / float(bps); }
     float getDuration() const { return duration_sec; }
     bool isPlaying() const { return is_playing; }
@@ -187,7 +186,7 @@ public:
         if(!file) return AUDIOLIB_FILE_ERROR;
         fseek(file,12,SEEK_SET);
 
-        struct WaveFormat{
+        struct WaveFormat {
             uint16_t format;
             uint16_t channels;
             uint32_t sample_rate;
@@ -269,14 +268,9 @@ public:
  * Backends
  ************************************************************************/
 
-struct Backend {
-    Backend() { }
-    virtual ~Backend() { };
-};
-
 static void fill_buffer(void* inUserData, AudioQueueRef queue, AudioQueueBufferRef buffer);
-struct BackendAudioToolbox : Backend {
-    BackendAudioToolbox(Manager *mgr) : Backend() {
+struct BackendAudioToolbox {
+    BackendAudioToolbox(Manager *mgr) {
         AudioStreamBasicDescription desc;
         desc.mSampleRate = 44100;
         desc.mFormatID = kAudioFormatLinearPCM;
@@ -334,7 +328,7 @@ public:
         delete [] temp_buf;
     }
     
-    Sound *load(const std::string &path, int32_t _is_loop, int32_t *err) {
+    Sound *load(const std::string &path, int32_t _loop, int32_t *err) {
         std::string ext;
         size_t dot = path.rfind('.');
         if(dot != std::string::npos) ext = path.substr(dot+1, path.length() - dot - 1);
@@ -345,7 +339,7 @@ public:
         else if(ext == "ogg") ret = new SoundOGG();
         else return nullptr;
         
-        *err = ret->load(path,_is_loop);
+        *err = ret->load(path,_loop);
         sounds.push_back(ret);
         return ret;
     }
@@ -362,7 +356,7 @@ public:
     }
     
 private:
-    Backend *backend = nullptr;
+    BackendAudioToolbox *backend = nullptr;
     int16_t *temp_buf = nullptr;
     std::vector<Sound*> sounds;
     void *prev_buffer = nullptr;
