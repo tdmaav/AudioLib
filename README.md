@@ -18,7 +18,7 @@ Simple lightweight audio library for iOS
 
 manager = new AudioLib::Manager();
 
-sound = manager->load("ocean.ogg", true);
+sound = manager->load("ocean.ogg", -1);
 sound->volume = 0.5f;
 sound->pan = 0.25f;
 sound->play();
