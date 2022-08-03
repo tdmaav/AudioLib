@@ -7,8 +7,11 @@
 #include <string>
 #include <vector>
 
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcomma"
+#pragma GCC diagnostic ignored "-Wconversion"
+#pragma GCC diagnostic ignored "-Wshadow"
 #include "stb_vorbis.h"
 #pragma GCC diagnostic pop
 
@@ -52,8 +55,8 @@ public:
         delete [] data;
         data = nullptr;
     }
-    
     void seek(float t_sec) { pos_sample = t_sec * bps * channels; }
+
     float getPositionSec() const { return (pos_sample / channels) / float(bps); }
     float getDuration() const { return duration_sec; }
     bool isPlaying() const { return is_playing; }
@@ -69,7 +72,7 @@ protected:
         int16_t *dst = static_cast<int16_t*>(temp_buf);
         const int16_t *src = reinterpret_cast<const int16_t*>(data);
         size_t src_samples = this->size / sizeof(int16_t);
-        size_t src_samples_repeats = src_samples * (loop + 1);
+        size_t src_samples_repeats = src_samples * (loop+1);
         int32_t sample_scale = 44100 / freq;
         
         samples /= sample_scale;
@@ -156,7 +159,7 @@ protected:
         // mix
         float volumes[2] = { std::min(-pan + 1.0f, 1.0f) * volume, std::min(pan + 1.0f, 1.0f) * volume };
         int16_t *outbuf = static_cast<int16_t*>(buf);
-        for(size_t i = 0; i < num; i++) {
+        for(i = 0; i < num; i++) {
             int32_t v = outbuf[i] + dst[i] * volumes[i % 2];
             outbuf[i] = std::min(std::max(v, -32768), 32767);
         }
@@ -186,7 +189,7 @@ public:
         if(!file) return AUDIOLIB_FILE_ERROR;
         fseek(file,12,SEEK_SET);
 
-        struct WaveFormat {
+        struct WaveFormat{
             uint16_t format;
             uint16_t channels;
             uint32_t sample_rate;
@@ -206,7 +209,7 @@ public:
                 this->bps = fmt.bps;
                 this->freq = fmt.sample_rate;
                 if(fmt.format != 1 || fmt.bps != 16) break;
-                if(fmt.channels < 1 || fmt.channels > 2) {
+                if(fmt.channels < 0 || fmt.channels > 2) {
                     fclose(file);
                     return AUDIOLIB_WRONG_CHANNEL_COUNT;
                 }
@@ -247,7 +250,7 @@ public:
         auto info = stb_vorbis_get_info(stream);
         uint32_t samples = stb_vorbis_stream_length_in_samples(stream) * info.channels;
         if(!samples) return AUDIOLIB_DECODE_ERROR;
-        if(info.channels < 1 || info.channels > 2)
+        if(info.channels < 0 || info.channels > 2)
             return AUDIOLIB_WRONG_CHANNEL_COUNT;
         if(info.sample_rate != 44100 && info.sample_rate != 22050 && info.sample_rate != 11025)
             return AUDIOLIB_WRONG_SAMPLE_RATE;
@@ -268,9 +271,14 @@ public:
  * Backends
  ************************************************************************/
 
+struct Backend {
+    Backend() { }
+    virtual ~Backend() { };
+};
+
 static void fill_buffer(void* inUserData, AudioQueueRef queue, AudioQueueBufferRef buffer);
-struct BackendAudioToolbox {
-    BackendAudioToolbox(Manager *mgr) {
+struct BackendAudioToolbox : Backend {
+    BackendAudioToolbox(Manager *mgr) : Backend() {
         AudioStreamBasicDescription desc;
         desc.mSampleRate = 44100;
         desc.mFormatID = kAudioFormatLinearPCM;
@@ -319,7 +327,7 @@ static std::string strlow(const std::string &_str) {
 class Manager {
 public:
     Manager() {
-        temp_buf = new uint8_t[BUFFER_SIZE];
+        temp_buf = new int16_t[BUFFER_SIZE / 2]; // bytes to shorts
         backend = new BackendAudioToolbox(this);
     }
     
@@ -328,7 +336,7 @@ public:
         delete [] temp_buf;
     }
     
-    Sound *load(const std::string &path, int32_t _loop, int32_t *err) {
+    Sound *load(const std::string &path, int32_t _is_loop, int32_t *err) {
         std::string ext;
         size_t dot = path.rfind('.');
         if(dot != std::string::npos) ext = path.substr(dot+1, path.length() - dot - 1);
@@ -339,7 +347,7 @@ public:
         else if(ext == "ogg") ret = new SoundOGG();
         else return nullptr;
         
-        *err = ret->load(path,_loop);
+        *err = ret->load(path,_is_loop);
         sounds.push_back(ret);
         return ret;
     }
@@ -356,8 +364,8 @@ public:
     }
     
 private:
-    BackendAudioToolbox *backend = nullptr;
-    uint8_t *temp_buf = nullptr;
+    Backend *backend = nullptr;
+    int16_t *temp_buf = nullptr;
     std::vector<Sound*> sounds;
     void *prev_buffer = nullptr;
 };
