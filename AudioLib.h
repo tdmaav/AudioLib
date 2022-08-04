@@ -113,7 +113,7 @@ protected:
             }
         }
         pos_sample += samples * channels;
-        pos_sample %= this->size / sizeof(int16_t);
+//        pos_sample %= this->size / sizeof(int16_t);
         
         // resample
         size_t i = samples * 2 - 1;
@@ -299,6 +299,26 @@ struct SoundNoise : Sound {
         );
         int16_t *dst = reinterpret_cast<int16_t*>(data);
         for(size_t i = 0; i < samples * channels; i++) dst[i] = distrib(gen);
+    }
+};
+
+struct SoundSin : Sound {
+    int32_t load(const std::string &_filename, int32_t _loop) override {
+        this->loop = -1;
+        this->channels = 1;
+        this->bps = 16;
+        this->freq = 44100;
+        this->size = SAMPLE_COUNT * sizeof(int16_t);
+        this->data = new uint8_t[this->size];
+        return AUDIOLIB_SUCCESS;
+    }
+
+    void read(size_t samples) override {
+        int16_t *dst = reinterpret_cast<int16_t*>(data);
+        for(size_t i = 0; i < samples * channels; i++) {
+            size_t pos = pos_sample + i;
+            dst[pos % SAMPLE_COUNT] = std::sin((pos+std::sin(pos*0.0001f)*1000)*0.05f) * 32767;
+        }
     }
 };
 
