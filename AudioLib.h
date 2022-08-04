@@ -1,5 +1,6 @@
 /************************************************************************
  * Audio library
+ * https://github.com/tdmaav/AudioLib
  ************************************************************************/
 
 #pragma once
@@ -15,11 +16,16 @@
 #include "stb_vorbis.h"
 #pragma GCC diagnostic pop
 
-#include <AudioToolbox/AudioQueue.h>
-#include <AVFoundation/AVFoundation.h>
-#include <AVFoundation/AVAudioSession.h>
-#include <AVFoundation/AVPlayer.h>
-#include <AVFoundation/AVAsset.h>
+#ifdef AUDIOLIB_BACKEND_AUDIOTOOLBOX
+    #include <AudioToolbox/AudioQueue.h>
+    #include <AVFoundation/AVFoundation.h>
+    #include <AVFoundation/AVAudioSession.h>
+    #include <AVFoundation/AVPlayer.h>
+    #include <AVFoundation/AVAsset.h>
+#elif defined(AUDIOLIB_BACKEND_OPENSLES)
+    #include <SLES/OpenSLES.h>
+    #include <SLES/OpenSLES_Android.h>
+#endif
 
 /*
  */
@@ -28,7 +34,8 @@ namespace AudioLib {
 
 class Manager;
 constexpr size_t FRAME_SIZE = sizeof(int16_t) * 2;
-constexpr size_t BUFFER_SIZE = 2048 * FRAME_SIZE;
+constexpr size_t FRAMES_COUNT = 2048;
+constexpr size_t BUFFER_SIZE = FRAMES_COUNT * FRAME_SIZE;
 
 enum {
     AUDIOLIB_SUCCESS = 0,
@@ -46,6 +53,7 @@ public:
     virtual ~Sound() { delete [] data; }
 
     virtual int32_t load(const std::string &filename, int32_t _loop) = 0;
+    virtual void read(size_t samples) { }
     
     void play() { is_playing = true; }
     void pause() { is_playing = false; }
@@ -68,7 +76,7 @@ public:
 protected:
     void fillBuffer(void *buf, void *prev_buf, void *temp_buf, size_t samples) {
         if(!is_playing || !data) return;
-        
+
         int16_t *dst = static_cast<int16_t*>(temp_buf);
         const int16_t *src = reinterpret_cast<const int16_t*>(data);
         size_t src_samples = this->size / sizeof(int16_t);
@@ -78,6 +86,7 @@ protected:
         samples /= sample_scale;
 
         if(loop >= 0) memset(temp_buf, 0, BUFFER_SIZE);
+        read(samples);
         
         // stereo
         if(channels == 2) {
@@ -104,6 +113,7 @@ protected:
             }
         }
         pos_sample += samples * channels;
+        pos_sample %= this->size / sizeof(int16_t);
         
         // resample
         size_t i = samples * 2 - 1;
@@ -268,17 +278,38 @@ public:
 };
 
 /************************************************************************
+ * Generative
+ ************************************************************************/
+
+class SoundNoise : public Sound {
+public:
+    int32_t load(const std::string &_filename, int32_t _loop) override {
+        this->loop = -1;
+        this->channels = 1;
+        this->bps = 16;
+        this->freq = 44100;
+        this->size = FRAMES_COUNT * sizeof(int16_t);
+        this->data = new uint8_t[this->size];
+        return AUDIOLIB_SUCCESS;
+    }
+
+    void read(size_t samples) override {
+        int16_t *dst = reinterpret_cast<int16_t*>(data);
+        for(size_t i = 0; i < samples * channels; i++) {
+            dst[i] = -32768 + rand() % 65535;
+        }
+    }
+};
+
+
+/************************************************************************
  * Backends
  ************************************************************************/
 
+#ifdef AUDIOLIB_BACKEND_AUDIOTOOLBOX
+static void fill_buffer(void* in_user_data, AudioQueueRef queue, AudioQueueBufferRef buffer);
 struct Backend {
-    Backend() { }
-    virtual ~Backend() { };
-};
-
-static void fill_buffer(void* inUserData, AudioQueueRef queue, AudioQueueBufferRef buffer);
-struct BackendAudioToolbox : Backend {
-    BackendAudioToolbox(Manager *mgr) : Backend() {
+    Backend(Manager *mgr) {
         AudioStreamBasicDescription desc;
         desc.mSampleRate = 44100;
         desc.mFormatID = kAudioFormatLinearPCM;
@@ -305,13 +336,66 @@ struct BackendAudioToolbox : Backend {
         if(r) printf("AudioQueueStart() failed");
     }
     
-    ~BackendAudioToolbox() {
+    ~Backend() {
         AudioQueueStop(queue, true);
         AudioQueueDispose(queue, true);
     }
     
     AudioQueueRef queue;
 };
+
+#elif defined(AUDIOLIB_BACKEND_OPENSLES)
+static void fill_buffer(SLBufferQueueItf, void*);
+struct Backend {
+    Backend(Manager *mgr) {
+        auto r = slCreateEngine(&engine, 0, nullptr, 0, NULL, NULL);
+        assert(r == SL_RESULT_SUCCESS);
+        (*engine)->Realize(engine, SL_BOOLEAN_FALSE);
+
+        SLEngineItf engine_itf;
+        (*engine)->GetInterface(engine, SL_IID_ENGINE, &engine_itf);
+        r = (*engine_itf)->CreateOutputMix(engine_itf, &output, 0, NULL, NULL);
+        assert(r == SL_RESULT_SUCCESS);
+        (*output)->Realize(output, SL_BOOLEAN_FALSE);
+
+        SLDataFormat_PCM format;
+        format.formatType = SL_DATAFORMAT_PCM;
+        format.numChannels = 2;
+        format.samplesPerSec = SL_SAMPLINGRATE_44_1;
+        format.bitsPerSample = SL_PCMSAMPLEFORMAT_FIXED_16;
+        format.containerSize = SL_PCMSAMPLEFORMAT_FIXED_16;
+        format.channelMask = SL_SPEAKER_FRONT_LEFT | SL_SPEAKER_FRONT_RIGHT;
+        format.endianness = SL_BYTEORDER_LITTLEENDIAN;
+
+        SLDataLocator_AndroidSimpleBufferQueue loc_source = { SL_DATALOCATOR_ANDROIDSIMPLEBUFFERQUEUE, 2 };
+        SLDataLocator_OutputMix loc_sink = { SL_DATALOCATOR_OUTPUTMIX, output };
+        SLDataSource data_src = {&loc_source, &format };
+        SLDataSink data_sink = {&loc_sink, nullptr };
+        SLInterfaceID audio_itf[] = {SL_IID_BUFFERQUEUE, SL_IID_PLAY  };
+        SLboolean req[] = {SL_BOOLEAN_TRUE, SL_BOOLEAN_TRUE };
+        SLPlayItf play_itf  = nullptr;
+
+        (*engine_itf)->CreateAudioPlayer(engine_itf, &player, &data_src, &data_sink, 2, audio_itf, req);
+        (*player)->Realize(player, SL_BOOLEAN_FALSE);
+        (*player)->GetInterface(player, SL_IID_BUFFERQUEUE, &queue);
+        (*player)->GetInterface(player, SL_IID_PLAY, &play_itf);
+        (*queue)->RegisterCallback(queue, fill_buffer, mgr);
+        (*play_itf)->SetPlayState(play_itf, SL_PLAYSTATE_PLAYING);
+        memset(buffer[0], 0, BUFFER_SIZE);
+        (*queue)->Enqueue(queue, buffer[0], BUFFER_SIZE);
+    }
+
+    ~Backend() {
+        if(player) (*player)->Destroy(player);
+        if(output) (*output)->Destroy(output);
+        if(engine) (*engine)->Destroy(engine);
+    }
+
+    SLObjectItf engine, output, player;
+    SLBufferQueueItf queue = nullptr;
+    uint8_t buffer[2][BUFFER_SIZE];
+};
+#endif
 
 /************************************************************************
  * Manager
@@ -327,8 +411,8 @@ static std::string strlow(const std::string &_str) {
 class Manager {
 public:
     Manager() {
-        temp_buf = new int16_t[BUFFER_SIZE / 2]; // bytes to shorts
-        backend = new BackendAudioToolbox(this);
+        temp_buf = new int16_t[BUFFER_SIZE / sizeof(int16_t)]; // bytes to shorts
+        backend = new Backend(this);
     }
     
     ~Manager() {
@@ -351,6 +435,13 @@ public:
         sounds.push_back(ret);
         return ret;
     }
+
+    template<class T> Sound *load() {
+        auto ret = new T();
+        ret->load("",true);
+        sounds.push_back(ret);
+        return ret;
+    }
     
     void free(Sound *p) {
         auto it = std::remove(sounds.begin(), sounds.end(), p);
@@ -362,6 +453,8 @@ public:
         for(auto *s : sounds) s->fillBuffer(buf,prev_buffer,temp_buf,samples);
         prev_buffer = buf;
     }
+
+    Backend *getBackend() const { return backend; }
     
 private:
     Backend *backend = nullptr;
@@ -374,12 +467,26 @@ private:
  * Backend callbacks
  ************************************************************************/
 
-static void fill_buffer(void* inUserData, AudioQueueRef queue, AudioQueueBufferRef buffer) {
-    auto manager = static_cast<Manager*>(inUserData);
+#ifdef AUDIOLIB_BACKEND_AUDIOTOOLBOX
+static void fill_buffer(void* in_user_data, AudioQueueRef queue, AudioQueueBufferRef buffer) {
+    auto manager = static_cast<Manager*>(in_user_data);
     buffer->mAudioDataByteSize = BUFFER_SIZE;
     memset(buffer->mAudioData, 0, buffer->mAudioDataByteSize);
     manager->fillBuffer(buffer->mAudioData, buffer->mAudioDataBytesCapacity / FRAME_SIZE);
     AudioQueueEnqueueBuffer(queue, buffer, 0, NULL);
 }
+
+#elif defined(AUDIOLIB_BACKEND_OPENSLES)
+static void fill_buffer(SLBufferQueueItf bq, void *context) {
+    static size_t i = 0;
+    auto manager = static_cast<Manager*>(context);
+    auto backend = manager->getBackend();
+    auto data = backend->buffer[i];
+    memset(data, 0, BUFFER_SIZE);
+    manager->fillBuffer(data, FRAMES_COUNT);
+    (*backend->queue)->Enqueue(backend->queue, data, BUFFER_SIZE);
+    i ^= 1;
+}
+#endif
 
 } // namespace AudioLib
