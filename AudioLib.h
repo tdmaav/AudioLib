@@ -7,7 +7,8 @@
 
 #include <string>
 #include <vector>
-
+#include <type_traits>
+#include <random>
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcomma"
@@ -33,9 +34,9 @@
 namespace AudioLib {
 
 class Manager;
-constexpr size_t FRAME_SIZE = sizeof(int16_t) * 2;
-constexpr size_t FRAMES_COUNT = 2048;
-constexpr size_t BUFFER_SIZE = FRAMES_COUNT * FRAME_SIZE;
+constexpr size_t SAMPLE_SIZE = sizeof(int16_t) * 2;
+constexpr size_t SAMPLE_COUNT = 2048;
+constexpr size_t BUFFER_SIZE = SAMPLE_COUNT * SAMPLE_SIZE;
 
 enum {
     AUDIOLIB_SUCCESS = 0,
@@ -45,8 +46,7 @@ enum {
     AUDIOLIB_WRONG_CHANNEL_COUNT
 };
 
-class Sound {
-public:
+struct Sound {
     friend class Manager;
     
     Sound() { }
@@ -189,8 +189,7 @@ protected:
  * WAV
  ************************************************************************/
 
-class SoundWAV : public Sound {
-public:
+struct SoundWAV : Sound {
     int32_t load(const std::string &_filename, int32_t _loop) override {
         this->filename = _filename;
         this->loop = _loop;
@@ -248,8 +247,7 @@ public:
  * OGG
  ************************************************************************/
 
-class SoundOGG : public Sound {
-public:
+struct SoundOGG : Sound {
     int32_t load(const std::string &_filename, int32_t _loop) override {
         this->filename = _filename;
         this->loop = _loop;
@@ -281,26 +279,36 @@ public:
  * Generative
  ************************************************************************/
 
-class SoundNoise : public Sound {
-public:
+struct SoundNoise : Sound {
     int32_t load(const std::string &_filename, int32_t _loop) override {
         this->loop = -1;
         this->channels = 1;
         this->bps = 16;
         this->freq = 44100;
-        this->size = FRAMES_COUNT * sizeof(int16_t);
+        this->size = SAMPLE_COUNT * sizeof(int16_t);
         this->data = new uint8_t[this->size];
         return AUDIOLIB_SUCCESS;
     }
 
     void read(size_t samples) override {
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<> distrib(
+            std::numeric_limits<std::int16_t>::min(),
+            std::numeric_limits<std::int16_t>::max()
+        );
         int16_t *dst = reinterpret_cast<int16_t*>(data);
-        for(size_t i = 0; i < samples * channels; i++) {
-            dst[i] = -32768 + rand() % 65535;
-        }
+        for(size_t i = 0; i < samples * channels; i++) dst[i] = distrib(gen);
     }
 };
 
+/************************************************************************
+ * Filters
+ ************************************************************************/
+
+struct Filter {
+    virtual int16_t *process(int16_t *data, size_t samples) = 0;
+};
 
 /************************************************************************
  * Backends
@@ -411,7 +419,7 @@ static std::string strlow(const std::string &_str) {
 class Manager {
 public:
     Manager() {
-        temp_buf = new int16_t[BUFFER_SIZE / sizeof(int16_t)]; // bytes to shorts
+        temp_buf = new int16_t[BUFFER_SIZE / sizeof(int16_t)];
         backend = new Backend(this);
     }
     
@@ -472,7 +480,7 @@ static void fill_buffer(void* in_user_data, AudioQueueRef queue, AudioQueueBuffe
     auto manager = static_cast<Manager*>(in_user_data);
     buffer->mAudioDataByteSize = BUFFER_SIZE;
     memset(buffer->mAudioData, 0, buffer->mAudioDataByteSize);
-    manager->fillBuffer(buffer->mAudioData, buffer->mAudioDataBytesCapacity / FRAME_SIZE);
+    manager->fillBuffer(buffer->mAudioData, buffer->mAudioDataBytesCapacity / SAMPLE_SIZE);
     AudioQueueEnqueueBuffer(queue, buffer, 0, NULL);
 }
 
@@ -483,7 +491,7 @@ static void fill_buffer(SLBufferQueueItf bq, void *context) {
     auto backend = manager->getBackend();
     auto data = backend->buffer[i];
     memset(data, 0, BUFFER_SIZE);
-    manager->fillBuffer(data, FRAMES_COUNT);
+    manager->fillBuffer(data, SAMPLE_COUNT);
     (*backend->queue)->Enqueue(backend->queue, data, BUFFER_SIZE);
     i ^= 1;
 }
