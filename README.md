@@ -1,8 +1,9 @@
 # AudioLib
-Simple lightweight audio library for iOS
+Simple C++ lightweight audio library
 
 ## Features
-* support for OGG & WAV
+* support for Android & iOS
+* support for OGG, WAV & generative sounds
 * seamless loop playback
 * header-only
 
@@ -10,6 +11,10 @@ Simple lightweight audio library for iOS
 * no streaming
 * only 44100, 22050 and 11025 sample rates are supported
 
+## Roadmap
+* fft based filters
+* streaming
+* mp3 support
 
 ## Usage:
 
