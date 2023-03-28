@@ -63,9 +63,9 @@ struct Sound {
         delete [] data;
         data = nullptr;
     }
-    void seek(float t_sec) { pos_sample = t_sec * bps * channels; }
+    void seek(float t_sec) { pos_sample = t_sec * freq * channels; }
 
-    float getPositionSec() const { return (pos_sample / channels) / float(bps); }
+    float getPositionSec() const { return (pos_sample / channels) / float(freq); }
     float getDuration() const { return duration_sec; }
     bool isPlaying() const { return is_playing; }
     std::string getFilePath() const { return filename; }
